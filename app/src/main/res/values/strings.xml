@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">ScreenGoblin</string>
+    <string name="today_screen_time">Today\'\s Screen Time</string>
+    <string name="screen_time_value">4hr30min</string>
+</resources>
