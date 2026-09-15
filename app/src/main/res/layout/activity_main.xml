@@ -51,30 +51,59 @@
 
 
     <LinearLayout
+        android:id="@+id/app_usage_list"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:id="@+id/app_usage_list"
         app:layout_constraintTop_toBottomOf="@id/app_usage_title"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <TextView
-            android:id="@+id/youtube_name"
-            android:layout_width="wrap_content"
+        <!-- YouTube row -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:orientation="horizontal"
             android:layout_marginTop="16dp"
-            android:text="@string/youtube_name"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/app_usage_title" />
+            tools:ignore="UselessParent">
 
-        <TextView
-            android:id="@+id/youtube_time"
-            android:layout_width="wrap_content"
+            <TextView
+                android:id="@+id/youtube_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/youtube_name" />
+
+            <TextView
+                android:id="@+id/youtube_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/youtube_time" />
+
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/youtube_time"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="@id/youtube_name" />
+            android:orientation="horizontal"
+            android:layout_marginTop="16dp">
+
+            <TextView
+                android:id="@+id/instagram_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/instagram_name" />
+
+            <TextView
+                android:id="@+id/instagram_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/instagram_time" />
+
+        </LinearLayout>
+
     </LinearLayout>
 
 
