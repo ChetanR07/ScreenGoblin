@@ -6,5 +6,7 @@
     <string name="youtube_name">Youtube</string>
     <string name="youtube_time">1hr 01mins</string>
     <string name="instagram_name">Instagram</string>
-    <string name="instagram_time">45mins</string>"
+    <string name="instagram_time">45mins</string>
+    <string name="efootball_name">Efootball</string>
+    <string name="efootball_time">1hr 30mins</string>
 </resources>

@@ -23,6 +23,7 @@
         android:id="@+id/today_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
         android:layout_marginTop="3dp"
         android:text="@string/today_screen_time"
         app:layout_constraintStart_toStartOf="@id/title"
@@ -32,6 +33,7 @@
         android:id="@+id/screen_time_value"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:text="@string/screen_time_value"
         android:textSize="30sp"
         android:textStyle="bold"
@@ -101,6 +103,25 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/instagram_time" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="16dp">
+            <TextView
+                android:id="@+id/efootball_name"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/efootball_name" />
+            <TextView
+                android:id="@+id/efootball_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/efootball_time" />
 
         </LinearLayout>
 
