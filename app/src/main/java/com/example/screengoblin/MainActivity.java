@@ -7,12 +7,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Process;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.content.pm.ResolveInfo;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
@@ -22,6 +25,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,11 +36,13 @@ public class MainActivity extends AppCompatActivity {
         public String appName;
         public String packageName;
         public long timeInForeground; // in milliseconds
+        public Drawable appIcon;
 
-        public AppUsageInfo(String appName, String packageName, long timeInForeground) {
+        public AppUsageInfo(String appName, String packageName, long timeInForeground, Drawable appIcon) {
             this.appName = appName;
             this.packageName = packageName;
             this.timeInForeground = timeInForeground;
+            this.appIcon = appIcon;
         }
     }
 
@@ -52,7 +58,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // Step 5: Trigger data loading whenever the user returns to the app
     @Override
     protected void onResume() {
         super.onResume();
@@ -63,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Step 2: Permission check and request methods
+    // Permission check and request methods
     private boolean hasUsageStatsPermission() {
         AppOpsManager appOps = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
         int mode = appOps.checkOpNoThrow(
@@ -79,8 +84,8 @@ public class MainActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    // Step 3: Fetch real usage statistics from the device
-    private List<AppUsageInfo> getTodayUsageStats() {
+    // Fetch screen time for all apps available on the phone
+    private List<AppUsageInfo> getAllInstalledAppsUsage() {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
 
@@ -93,45 +98,66 @@ public class MainActivity extends AppCompatActivity {
         long startTime = calendar.getTimeInMillis();
         long endTime = System.currentTimeMillis();
 
+        // Query aggregated stats for today
         Map<String, UsageStats> stats = usageStatsManager.queryAndAggregateUsageStats(startTime, endTime);
-        List<AppUsageInfo> usageList = new ArrayList<>();
-
-        if (stats != null) {
-            for (UsageStats usageStats : stats.values()) {
-                long totalTimeMs = usageStats.getTotalTimeInForeground();
-                // Filter out apps with 0 usage or launcher itself
-                if (totalTimeMs > 0 && !usageStats.getPackageName().equals(getPackageName())) {
-                    try {
-                        ApplicationInfo appInfo = packageManager.getApplicationInfo(usageStats.getPackageName(), 0);
-                        String appName = packageManager.getApplicationLabel(appInfo).toString();
-                        usageList.add(new AppUsageInfo(appName, usageStats.getPackageName(), totalTimeMs));
-                    } catch (PackageManager.NameNotFoundException ignored) {
-                        // Skip uninstalled or system packages with no display name
-                    }
-                }
-            }
+        if (stats == null) {
+            stats = new HashMap<>();
         }
 
-        // Sort descending by usage time (most used first)
-        usageList.sort((a, b) -> Long.compare(b.timeInForeground, a.timeInForeground));
+        // Query all user-facing apps installed on the phone (apps in app drawer / launcher)
+        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
+        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
+        List<ResolveInfo> installedApps = packageManager.queryIntentActivities(mainIntent, 0);
+
+        List<AppUsageInfo> usageList = new ArrayList<>();
+        Map<String, Boolean> seenPackages = new HashMap<>();
+
+        for (ResolveInfo resolveInfo : installedApps) {
+            String packageName = resolveInfo.activityInfo.packageName;
+            if (seenPackages.containsKey(packageName) || packageName.equals(getPackageName())) {
+                continue;
+            }
+            seenPackages.put(packageName, true);
+
+            String appName = resolveInfo.loadLabel(packageManager).toString();
+            Drawable appIcon = resolveInfo.loadIcon(packageManager);
+
+            long usageTimeMs = 0;
+            if (stats.containsKey(packageName) && stats.get(packageName) != null) {
+                usageTimeMs = stats.get(packageName).getTotalTimeInForeground();
+            }
+
+            usageList.add(new AppUsageInfo(appName, packageName, usageTimeMs, appIcon));
+        }
+
+        // Sort: apps with most screen time first, then alphabetically for 0-minute apps
+        usageList.sort((a, b) -> {
+            if (b.timeInForeground != a.timeInForeground) {
+                return Long.compare(b.timeInForeground, a.timeInForeground);
+            }
+            return a.appName.compareToIgnoreCase(b.appName);
+        });
+
         return usageList;
     }
 
-    // Step 4: Millisecond formatter
+    // Millisecond to readable time formatter
     private String formatDuration(long millis) {
         long hours = millis / (1000 * 60 * 60);
         long minutes = (millis / (1000 * 60)) % 60;
 
         if (hours > 0) {
             return hours + "hr " + minutes + "min";
-        } else {
+        } else if (minutes > 0) {
             return minutes + "min";
+        } else {
+            return "0min";
         }
     }
 
-    // Step 5: Update the UI views with real data
+    // Update the UI with all apps and total screentime
     private void loadRealData() {
-        List<AppUsageInfo> usageList = getTodayUsageStats();
+        List<AppUsageInfo> usageList = getAllInstalledAppsUsage();
 
         // 1. Calculate total screen time & update main text view
         long totalMillis = 0;
@@ -141,28 +167,35 @@ public class MainActivity extends AppCompatActivity {
         TextView screenTimeView = findViewById(R.id.screen_time_value);
         screenTimeView.setText(formatDuration(totalMillis));
 
-        // 2. Populate app rows dynamically into app_usage_list
+        // 2. Populate all available apps dynamically
         LinearLayout appUsageContainer = findViewById(R.id.app_usage_list);
-        appUsageContainer.removeAllViews(); // Clear dummy static rows
+        appUsageContainer.removeAllViews();
 
-        // Show top apps
-        int limit = Math.min(usageList.size(), 10);
-        for (int i = 0; i < limit; i++) {
-            AppUsageInfo app = usageList.get(i);
+        int density = (int) getResources().getDisplayMetrics().density;
 
+        for (AppUsageInfo app : usageList) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
             );
-            rowParams.setMargins(0, 24, 0, 0);
+            rowParams.setMargins(0, 8 * density, 0, 8 * density);
             row.setLayoutParams(rowParams);
+
+            // App Icon
+            ImageView iconView = new ImageView(this);
+            iconView.setImageDrawable(app.appIcon);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(36 * density, 36 * density);
+            iconParams.setMarginEnd(12 * density);
+            iconView.setLayoutParams(iconParams);
 
             // App Name
             TextView nameView = new TextView(this);
             nameView.setText(app.appName);
             nameView.setTextSize(16);
+            nameView.setTextColor(getColor(android.R.color.tab_indicator_text));
             LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
                     0,
                     LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -176,6 +209,7 @@ public class MainActivity extends AppCompatActivity {
             timeView.setTextSize(16);
             timeView.setGravity(Gravity.END);
 
+            row.addView(iconView);
             row.addView(nameView);
             row.addView(timeView);
             appUsageContainer.addView(row);
