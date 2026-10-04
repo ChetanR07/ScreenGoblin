@@ -104,30 +104,54 @@ public class MainActivity extends AppCompatActivity {
             stats = new HashMap<>();
         }
 
-        // Query all user-facing apps installed on the phone (apps in app drawer / launcher)
-        Intent mainIntent = new Intent(Intent.ACTION_MAIN, null);
-        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER);
-        List<ResolveInfo> installedApps = packageManager.queryIntentActivities(mainIntent, 0);
+        // Query all installed applications on the device
+        List<ApplicationInfo> installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA);
 
         List<AppUsageInfo> usageList = new ArrayList<>();
         Map<String, Boolean> seenPackages = new HashMap<>();
 
-        for (ResolveInfo resolveInfo : installedApps) {
-            String packageName = resolveInfo.activityInfo.packageName;
+        for (ApplicationInfo appInfo : installedApps) {
+            String packageName = appInfo.packageName;
+
             if (seenPackages.containsKey(packageName) || packageName.equals(getPackageName())) {
                 continue;
             }
-            seenPackages.put(packageName, true);
-
-            String appName = resolveInfo.loadLabel(packageManager).toString();
-            Drawable appIcon = resolveInfo.loadIcon(packageManager);
 
             long usageTimeMs = 0;
             if (stats.containsKey(packageName) && stats.get(packageName) != null) {
                 usageTimeMs = stats.get(packageName).getTotalTimeInForeground();
             }
 
-            usageList.add(new AppUsageInfo(appName, packageName, usageTimeMs, appIcon));
+            // Include if it's a launchable app, a user-installed app, an updated system app, or has recorded usage today
+            boolean isLaunchable = packageManager.getLaunchIntentForPackage(packageName) != null;
+            boolean isUserApp = (appInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0;
+            boolean isUpdatedSystemApp = (appInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+
+            if (isLaunchable || isUserApp || isUpdatedSystemApp || usageTimeMs > 0) {
+                seenPackages.put(packageName, true);
+                String appName = packageManager.getApplicationLabel(appInfo).toString();
+                Drawable appIcon = packageManager.getApplicationIcon(appInfo);
+
+                usageList.add(new AppUsageInfo(appName, packageName, usageTimeMs, appIcon));
+            }
+        }
+
+        // Also check if any package in usageStats wasn't in installedApps
+        for (Map.Entry<String, UsageStats> entry : stats.entrySet()) {
+            String pkg = entry.getKey();
+            if (!seenPackages.containsKey(pkg) && !pkg.equals(getPackageName())) {
+                long usageTimeMs = entry.getValue().getTotalTimeInForeground();
+                if (usageTimeMs > 0) {
+                    try {
+                        ApplicationInfo appInfo = packageManager.getApplicationInfo(pkg, 0);
+                        String appName = packageManager.getApplicationLabel(appInfo).toString();
+                        Drawable appIcon = packageManager.getApplicationIcon(appInfo);
+                        seenPackages.put(pkg, true);
+                        usageList.add(new AppUsageInfo(appName, pkg, usageTimeMs, appIcon));
+                    } catch (PackageManager.NameNotFoundException ignored) {
+                    }
+                }
+            }
         }
 
         // Sort: apps with most screen time first, then alphabetically for 0-minute apps
