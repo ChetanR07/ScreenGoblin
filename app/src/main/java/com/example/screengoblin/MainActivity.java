@@ -66,7 +66,7 @@ public class MainActivity extends AppCompatActivity {
     // Step 2: Permission check and request methods
     private boolean hasUsageStatsPermission() {
         AppOpsManager appOps = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
-        int mode = appOps.unsafeCheckOpNoThrow(
+        int mode = appOps.checkOpNoThrow(
                 AppOpsManager.OPSTR_GET_USAGE_STATS,
                 Process.myUid(),
                 getPackageName()
