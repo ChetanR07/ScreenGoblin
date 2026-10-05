@@ -1,6 +1,7 @@
 package com.example.screengoblin;
 
 import android.app.AppOpsManager;
+import android.app.usage.UsageEvents;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
@@ -84,12 +85,66 @@ public class MainActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
+    // Calculate exact foreground usage strictly between startTime (00:00:00 today) and endTime
+    private Map<String, Long> getExactTodayForegroundTimes(UsageStatsManager usageStatsManager, long startTime, long endTime) {
+        Map<String, Long> usageMap = new HashMap<>();
+        UsageEvents events = usageStatsManager.queryEvents(startTime, endTime);
+        if (events == null) {
+            return usageMap;
+        }
+
+        UsageEvents.Event currentEvent = new UsageEvents.Event();
+        Map<String, Long> resumeTimes = new HashMap<>();
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(currentEvent);
+            String pkg = currentEvent.getPackageName();
+            int type = currentEvent.getEventType();
+            long timestamp = currentEvent.getTimeStamp();
+
+            if (type == UsageEvents.Event.ACTIVITY_RESUMED || type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                resumeTimes.put(pkg, timestamp);
+            } else if (type == UsageEvents.Event.ACTIVITY_PAUSED
+                    || type == UsageEvents.Event.ACTIVITY_STOPPED
+                    || type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                if (resumeTimes.containsKey(pkg)) {
+                    long resumeTime = resumeTimes.get(pkg);
+                    long effectiveStart = Math.max(resumeTime, startTime);
+                    if (timestamp > effectiveStart) {
+                        long duration = timestamp - effectiveStart;
+                        usageMap.put(pkg, usageMap.getOrDefault(pkg, 0L) + duration);
+                    }
+                    resumeTimes.remove(pkg);
+                } else {
+                    // App was already in foreground before midnight
+                    if (timestamp > startTime) {
+                        long duration = timestamp - startTime;
+                        usageMap.put(pkg, usageMap.getOrDefault(pkg, 0L) + duration);
+                    }
+                }
+            }
+        }
+
+        // Account for any app currently open / in foreground right now
+        for (Map.Entry<String, Long> entry : resumeTimes.entrySet()) {
+            String pkg = entry.getKey();
+            long resumeTime = entry.getValue();
+            long effectiveStart = Math.max(resumeTime, startTime);
+            if (endTime > effectiveStart) {
+                long duration = endTime - effectiveStart;
+                usageMap.put(pkg, usageMap.getOrDefault(pkg, 0L) + duration);
+            }
+        }
+
+        return usageMap;
+    }
+
     // Fetch screen time for all apps available on the phone
     private List<AppUsageInfo> getAllInstalledAppsUsage() {
         UsageStatsManager usageStatsManager = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
         PackageManager packageManager = getPackageManager();
 
-        // Calculate start of today (00:00:00)
+        // Calculate start of today (00:00:00 today)
         Calendar calendar = Calendar.getInstance();
         calendar.set(Calendar.HOUR_OF_DAY, 0);
         calendar.set(Calendar.MINUTE, 0);
@@ -98,11 +153,8 @@ public class MainActivity extends AppCompatActivity {
         long startTime = calendar.getTimeInMillis();
         long endTime = System.currentTimeMillis();
 
-        // Query aggregated stats for today
-        Map<String, UsageStats> stats = usageStatsManager.queryAndAggregateUsageStats(startTime, endTime);
-        if (stats == null) {
-            stats = new HashMap<>();
-        }
+        // Query exact today usage events
+        Map<String, Long> todayUsage = getExactTodayForegroundTimes(usageStatsManager, startTime, endTime);
 
         // Query all installed applications on the device
         List<ApplicationInfo> installedApps = packageManager.getInstalledApplications(PackageManager.GET_META_DATA);
@@ -117,10 +169,7 @@ public class MainActivity extends AppCompatActivity {
                 continue;
             }
 
-            long usageTimeMs = 0;
-            if (stats.containsKey(packageName) && stats.get(packageName) != null) {
-                usageTimeMs = stats.get(packageName).getTotalTimeInForeground();
-            }
+            long usageTimeMs = todayUsage.getOrDefault(packageName, 0L);
 
             // Include if it's a launchable app, a user-installed app, an updated system app, or has recorded usage today
             boolean isLaunchable = packageManager.getLaunchIntentForPackage(packageName) != null;
@@ -136,20 +185,18 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // Also check if any package in usageStats wasn't in installedApps
-        for (Map.Entry<String, UsageStats> entry : stats.entrySet()) {
+        // Also check if any package with usage today wasn't in installedApps
+        for (Map.Entry<String, Long> entry : todayUsage.entrySet()) {
             String pkg = entry.getKey();
-            if (!seenPackages.containsKey(pkg) && !pkg.equals(getPackageName())) {
-                long usageTimeMs = entry.getValue().getTotalTimeInForeground();
-                if (usageTimeMs > 0) {
-                    try {
-                        ApplicationInfo appInfo = packageManager.getApplicationInfo(pkg, 0);
-                        String appName = packageManager.getApplicationLabel(appInfo).toString();
-                        Drawable appIcon = packageManager.getApplicationIcon(appInfo);
-                        seenPackages.put(pkg, true);
-                        usageList.add(new AppUsageInfo(appName, pkg, usageTimeMs, appIcon));
-                    } catch (PackageManager.NameNotFoundException ignored) {
-                    }
+            long usageTimeMs = entry.getValue();
+            if (!seenPackages.containsKey(pkg) && !pkg.equals(getPackageName()) && usageTimeMs > 0) {
+                try {
+                    ApplicationInfo appInfo = packageManager.getApplicationInfo(pkg, 0);
+                    String appName = packageManager.getApplicationLabel(appInfo).toString();
+                    Drawable appIcon = packageManager.getApplicationIcon(appInfo);
+                    seenPackages.put(pkg, true);
+                    usageList.add(new AppUsageInfo(appName, pkg, usageTimeMs, appIcon));
+                } catch (PackageManager.NameNotFoundException ignored) {
                 }
             }
         }
