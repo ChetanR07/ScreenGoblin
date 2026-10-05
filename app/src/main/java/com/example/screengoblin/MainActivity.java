@@ -94,7 +94,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         UsageEvents.Event currentEvent = new UsageEvents.Event();
-        Map<String, Long> resumeTimes = new HashMap<>();
+        String currentForegroundApp = null;
+        long currentForegroundStartTime = 0;
 
         while (events.hasNextEvent()) {
             events.getNextEvent(currentEvent);
@@ -102,38 +103,46 @@ public class MainActivity extends AppCompatActivity {
             int type = currentEvent.getEventType();
             long timestamp = currentEvent.getTimeStamp();
 
+            if (timestamp < startTime) {
+                timestamp = startTime;
+            }
+            if (timestamp > endTime) {
+                timestamp = endTime;
+            }
+
             if (type == UsageEvents.Event.ACTIVITY_RESUMED || type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                resumeTimes.put(pkg, timestamp);
-            } else if (type == UsageEvents.Event.ACTIVITY_PAUSED
-                    || type == UsageEvents.Event.ACTIVITY_STOPPED
-                    || type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
-                if (resumeTimes.containsKey(pkg)) {
-                    long resumeTime = resumeTimes.get(pkg);
-                    long effectiveStart = Math.max(resumeTime, startTime);
-                    if (timestamp > effectiveStart) {
-                        long duration = timestamp - effectiveStart;
-                        usageMap.put(pkg, usageMap.getOrDefault(pkg, 0L) + duration);
+                // If switching to a DIFFERENT app, record time spent on previous app
+                if (currentForegroundApp != null && !currentForegroundApp.equals(pkg)) {
+                    if (timestamp > currentForegroundStartTime && currentForegroundStartTime > 0) {
+                        long duration = timestamp - currentForegroundStartTime;
+                        usageMap.put(currentForegroundApp, usageMap.getOrDefault(currentForegroundApp, 0L) + duration);
                     }
-                    resumeTimes.remove(pkg);
-                } else {
-                    // App was already in foreground before midnight
-                    if (timestamp > startTime) {
-                        long duration = timestamp - startTime;
-                        usageMap.put(pkg, usageMap.getOrDefault(pkg, 0L) + duration);
+                    currentForegroundStartTime = timestamp;
+                } else if (currentForegroundApp == null) {
+                    currentForegroundStartTime = timestamp;
+                }
+                currentForegroundApp = pkg;
+
+            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND
+                    || type == UsageEvents.Event.SCREEN_NON_INTERACTIVE) {
+                // Device screen locked or app moved to background
+                if (currentForegroundApp != null && currentForegroundStartTime > 0) {
+                    if (type == UsageEvents.Event.SCREEN_NON_INTERACTIVE || (pkg != null && pkg.equals(currentForegroundApp))) {
+                        if (timestamp > currentForegroundStartTime) {
+                            long duration = timestamp - currentForegroundStartTime;
+                            usageMap.put(currentForegroundApp, usageMap.getOrDefault(currentForegroundApp, 0L) + duration);
+                        }
+                        currentForegroundApp = null;
+                        currentForegroundStartTime = 0;
                     }
                 }
             }
         }
 
-        // Account for any app currently open / in foreground right now
-        for (Map.Entry<String, Long> entry : resumeTimes.entrySet()) {
-            String pkg = entry.getKey();
-            long resumeTime = entry.getValue();
-            long effectiveStart = Math.max(resumeTime, startTime);
-            if (endTime > effectiveStart) {
-                long duration = endTime - effectiveStart;
-                usageMap.put(pkg, usageMap.getOrDefault(pkg, 0L) + duration);
-            }
+        // Add remaining time for the app open in foreground right now
+        if (currentForegroundApp != null && currentForegroundStartTime > 0 && endTime > currentForegroundStartTime) {
+            long duration = endTime - currentForegroundStartTime;
+            usageMap.put(currentForegroundApp, usageMap.getOrDefault(currentForegroundApp, 0L) + duration);
         }
 
         return usageMap;
