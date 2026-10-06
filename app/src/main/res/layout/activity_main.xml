@@ -40,38 +40,72 @@
         app:layout_constraintStart_toStartOf="@id/today_label"
         app:layout_constraintTop_toBottomOf="@id/today_label" />
 
-    <TextView
-        android:id="@+id/app_usage_title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="@string/app_usage"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        app:layout_constraintStart_toStartOf="@id/screen_time_value"
-        app:layout_constraintTop_toBottomOf="@id/screen_time_value" />
-
-
-    <ScrollView
-        android:id="@+id/scroll_container"
+    <!-- Scrollable Box Container -->
+    <LinearLayout
+        android:id="@+id/apps_box"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginTop="16dp"
         android:layout_marginStart="20dp"
+        android:layout_marginTop="24dp"
         android:layout_marginEnd="20dp"
-        android:layout_marginBottom="16dp"
-        app:layout_constraintTop_toBottomOf="@id/app_usage_title"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/bg_scrollable_box"
+        android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent">
+        app:layout_constraintTop_toBottomOf="@id/screen_time_value">
 
+        <!-- Header at the top of the scrollable box with Search icon at top-left -->
         <LinearLayout
-            android:id="@+id/app_usage_list"
+            android:id="@+id/box_header"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingBottom="10dp">
 
-    </ScrollView>
+            <ImageView
+                android:id="@+id/search_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:contentDescription="@string/app_usage"
+                android:src="@drawable/ic_search" />
+
+            <TextView
+                android:id="@+id/app_usage_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/app_usage"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+        <!-- Divider line -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#1F888888" />
+
+        <!-- Scrollable app list inside the box -->
+        <ScrollView
+            android:id="@+id/scroll_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:scrollbars="vertical">
+
+            <LinearLayout
+                android:id="@+id/app_usage_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+        </ScrollView>
+
+    </LinearLayout>
 
 
 

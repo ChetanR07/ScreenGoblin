@@ -94,8 +94,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         UsageEvents.Event currentEvent = new UsageEvents.Event();
-        String currentForegroundApp = null;
-        long currentForegroundStartTime = 0;
+        Map<String, Long> resumeTimes = new HashMap<>();
+        long maxPossibleDuration = Math.max(0, endTime - startTime);
 
         while (events.hasNextEvent()) {
             events.getNextEvent(currentEvent);
@@ -103,46 +103,68 @@ public class MainActivity extends AppCompatActivity {
             int type = currentEvent.getEventType();
             long timestamp = currentEvent.getTimeStamp();
 
-            if (timestamp < startTime) {
-                timestamp = startTime;
-            }
-            if (timestamp > endTime) {
-                timestamp = endTime;
+            if (timestamp < startTime || timestamp > endTime) {
+                continue;
             }
 
-            if (type == UsageEvents.Event.ACTIVITY_RESUMED || type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
-                // If switching to a DIFFERENT app, record time spent on previous app
-                if (currentForegroundApp != null && !currentForegroundApp.equals(pkg)) {
-                    if (timestamp > currentForegroundStartTime && currentForegroundStartTime > 0) {
-                        long duration = timestamp - currentForegroundStartTime;
-                        usageMap.put(currentForegroundApp, usageMap.getOrDefault(currentForegroundApp, 0L) + duration);
-                    }
-                    currentForegroundStartTime = timestamp;
-                } else if (currentForegroundApp == null) {
-                    currentForegroundStartTime = timestamp;
-                }
-                currentForegroundApp = pkg;
-
-            } else if (type == UsageEvents.Event.MOVE_TO_BACKGROUND
-                    || type == UsageEvents.Event.SCREEN_NON_INTERACTIVE) {
-                // Device screen locked or app moved to background
-                if (currentForegroundApp != null && currentForegroundStartTime > 0) {
-                    if (type == UsageEvents.Event.SCREEN_NON_INTERACTIVE || (pkg != null && pkg.equals(currentForegroundApp))) {
-                        if (timestamp > currentForegroundStartTime) {
-                            long duration = timestamp - currentForegroundStartTime;
-                            usageMap.put(currentForegroundApp, usageMap.getOrDefault(currentForegroundApp, 0L) + duration);
+            // Screen locked or turned off -> close all open app sessions immediately
+            if (type == UsageEvents.Event.SCREEN_NON_INTERACTIVE || type == UsageEvents.Event.KEYGUARD_SHOWN) {
+                for (Map.Entry<String, Long> entry : resumeTimes.entrySet()) {
+                    long resumeTime = entry.getValue();
+                    if (timestamp > resumeTime) {
+                        long duration = timestamp - resumeTime;
+                        if (duration > 0 && duration <= maxPossibleDuration) {
+                            usageMap.put(entry.getKey(), usageMap.getOrDefault(entry.getKey(), 0L) + duration);
                         }
-                        currentForegroundApp = null;
-                        currentForegroundStartTime = 0;
                     }
+                }
+                resumeTimes.clear();
+                continue;
+            }
+
+            if (pkg == null || pkg.equals("android") || pkg.equals("com.android.systemui")) {
+                continue;
+            }
+
+            // App came to top of screen
+            if (type == UsageEvents.Event.ACTIVITY_RESUMED || type == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                if (!resumeTimes.containsKey(pkg)) {
+                    resumeTimes.put(pkg, timestamp);
+                }
+            }
+            // App left top of screen / paused / stopped / moved to background
+            else if (type == UsageEvents.Event.ACTIVITY_PAUSED
+                    || type == UsageEvents.Event.ACTIVITY_STOPPED
+                    || type == UsageEvents.Event.MOVE_TO_BACKGROUND) {
+                if (resumeTimes.containsKey(pkg)) {
+                    long resumeTime = resumeTimes.get(pkg);
+                    if (timestamp > resumeTime) {
+                        long duration = timestamp - resumeTime;
+                        if (duration > 0 && duration <= maxPossibleDuration) {
+                            usageMap.put(pkg, usageMap.getOrDefault(pkg, 0L) + duration);
+                        }
+                    }
+                    resumeTimes.remove(pkg);
                 }
             }
         }
 
-        // Add remaining time for the app open in foreground right now
-        if (currentForegroundApp != null && currentForegroundStartTime > 0 && endTime > currentForegroundStartTime) {
-            long duration = endTime - currentForegroundStartTime;
-            usageMap.put(currentForegroundApp, usageMap.getOrDefault(currentForegroundApp, 0L) + duration);
+        // If an app is currently open on top of the screen right now
+        for (Map.Entry<String, Long> entry : resumeTimes.entrySet()) {
+            long resumeTime = entry.getValue();
+            if (endTime > resumeTime) {
+                long duration = endTime - resumeTime;
+                if (duration > 0 && duration <= maxPossibleDuration) {
+                    usageMap.put(entry.getKey(), usageMap.getOrDefault(entry.getKey(), 0L) + duration);
+                }
+            }
+        }
+
+        // Ensure no single app exceeds the total time elapsed today
+        for (Map.Entry<String, Long> entry : usageMap.entrySet()) {
+            if (entry.getValue() > maxPossibleDuration) {
+                usageMap.put(entry.getKey(), maxPossibleDuration);
+            }
         }
 
         return usageMap;
@@ -240,10 +262,19 @@ public class MainActivity extends AppCompatActivity {
         List<AppUsageInfo> usageList = getAllInstalledAppsUsage();
 
         // 1. Calculate total screen time & update main text view
+        Calendar calendar = Calendar.getInstance();
+        calendar.set(Calendar.HOUR_OF_DAY, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MILLISECOND, 0);
+        long maxElapsedToday = Math.max(0, System.currentTimeMillis() - calendar.getTimeInMillis());
+
         long totalMillis = 0;
         for (AppUsageInfo app : usageList) {
             totalMillis += app.timeInForeground;
         }
+        totalMillis = Math.min(totalMillis, maxElapsedToday);
+
         TextView screenTimeView = findViewById(R.id.screen_time_value);
         screenTimeView.setText(formatDuration(totalMillis));
 
