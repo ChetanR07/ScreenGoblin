@@ -8,11 +8,15 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Process;
 import android.provider.Settings;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.Gravity;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -31,6 +35,8 @@ import java.util.List;
 import java.util.Map;
 
 public class MainActivity extends AppCompatActivity {
+
+    private List<AppUsageInfo> allInstalledApps = new ArrayList<>();
 
     // Data model for each app's usage
     public static class AppUsageInfo {
@@ -56,6 +62,21 @@ public class MainActivity extends AppCompatActivity {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
+        });
+
+        // Set up real-time search filter
+        EditText searchInput = findViewById(R.id.search_input);
+        searchInput.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                filterAppList(s.toString());
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {}
         });
     }
 
@@ -259,7 +280,7 @@ public class MainActivity extends AppCompatActivity {
 
     // Update the UI with all apps and total screentime
     private void loadRealData() {
-        List<AppUsageInfo> usageList = getAllInstalledAppsUsage();
+        allInstalledApps = getAllInstalledAppsUsage();
 
         // 1. Calculate total screen time & update main text view
         Calendar calendar = Calendar.getInstance();
@@ -270,7 +291,7 @@ public class MainActivity extends AppCompatActivity {
         long maxElapsedToday = Math.max(0, System.currentTimeMillis() - calendar.getTimeInMillis());
 
         long totalMillis = 0;
-        for (AppUsageInfo app : usageList) {
+        for (AppUsageInfo app : allInstalledApps) {
             totalMillis += app.timeInForeground;
         }
         totalMillis = Math.min(totalMillis, maxElapsedToday);
@@ -278,13 +299,168 @@ public class MainActivity extends AppCompatActivity {
         TextView screenTimeView = findViewById(R.id.screen_time_value);
         screenTimeView.setText(formatDuration(totalMillis));
 
-        // 2. Populate all available apps dynamically
+        // 2. Update the Hollow Pie Chart breakdown
+        updatePieChart(allInstalledApps, totalMillis);
+
+        // 3. Filter / render using current search query
+        EditText searchInput = findViewById(R.id.search_input);
+        filterAppList(searchInput != null ? searchInput.getText().toString() : "");
+    }
+
+    // Populate the hollow pie chart with gradient slices and 5% threshold grouping
+    private void updatePieChart(List<AppUsageInfo> apps, long totalMillis) {
+        HollowPieChartView pieChartView = findViewById(R.id.pie_chart_view);
+        LinearLayout legendContainer = findViewById(R.id.pie_chart_legend);
+        if (legendContainer != null) {
+            legendContainer.removeAllViews();
+        }
+
+        if (pieChartView == null) return;
+
+        if (totalMillis <= 0) {
+            pieChartView.setSlices(new ArrayList<>());
+            return;
+        }
+
+        List<AppUsageInfo> prominentApps = new ArrayList<>();
+        long othersTotal = 0;
+
+        for (AppUsageInfo app : apps) {
+            if (app.timeInForeground <= 0) continue;
+            float ratio = (float) app.timeInForeground / totalMillis;
+            // Apps with 5% or more get individual slices; under 5% are grouped as "Others"
+            if (ratio >= 0.05f) {
+                prominentApps.add(app);
+            } else {
+                othersTotal += app.timeInForeground;
+            }
+        }
+
+        List<HollowPieChartView.PieSlice> slices = new ArrayList<>();
+
+        // Cohesive gradient endpoints (Deep Indigo to Vibrant Cyan)
+        int startColor = Color.parseColor("#6C5CE7");
+        int endColor = Color.parseColor("#00CEC9");
+
+        int count = prominentApps.size();
+        for (int i = 0; i < count; i++) {
+            AppUsageInfo app = prominentApps.get(i);
+            float ratio = (float) app.timeInForeground / totalMillis;
+            float fraction = count > 1 ? (float) i / (count - 1) : 0f;
+            int color = interpolateColor(startColor, endColor, fraction);
+
+            slices.add(new HollowPieChartView.PieSlice(app.appName, app.timeInForeground, ratio, color));
+        }
+
+        if (othersTotal > 0) {
+            float othersRatio = (float) othersTotal / totalMillis;
+            int othersColor = Color.parseColor("#A0AEC0"); // Slate grey for Others
+            slices.add(new HollowPieChartView.PieSlice("Others", othersTotal, othersRatio, othersColor));
+        }
+
+        pieChartView.setSlices(slices);
+
+        // Populate legend below pie chart with colored dot, app name, and percentage
+        if (legendContainer != null) {
+            int density = (int) getResources().getDisplayMetrics().density;
+            for (HollowPieChartView.PieSlice slice : slices) {
+                LinearLayout legendRow = new LinearLayout(this);
+                legendRow.setOrientation(LinearLayout.HORIZONTAL);
+                legendRow.setGravity(Gravity.CENTER_VERTICAL);
+                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+                rowParams.setMargins(0, 4 * density, 0, 4 * density);
+                legendRow.setLayoutParams(rowParams);
+
+                // Colored circle dot
+                android.graphics.drawable.GradientDrawable dot = new android.graphics.drawable.GradientDrawable();
+                dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+                dot.setColor(slice.color);
+                ImageView dotView = new ImageView(this);
+                dotView.setImageDrawable(dot);
+                LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(9 * density, 9 * density);
+                dotParams.setMarginEnd(7 * density);
+                dotView.setLayoutParams(dotParams);
+
+                // App Name
+                TextView nameView = new TextView(this);
+                nameView.setText(slice.name);
+                nameView.setTextSize(13);
+                nameView.setSingleLine(true);
+                nameView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(
+                        0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        1.0f
+                );
+                nameView.setLayoutParams(nameParams);
+
+                // Percentage
+                TextView percentView = new TextView(this);
+                int pct = Math.round(slice.percentage * 100);
+                percentView.setText(pct + "%");
+                percentView.setTextSize(13);
+                percentView.setTypeface(null, android.graphics.Typeface.BOLD);
+                percentView.setTextColor(Color.parseColor("#777777"));
+                percentView.setGravity(Gravity.END);
+
+                legendRow.addView(dotView);
+                legendRow.addView(nameView);
+                legendRow.addView(percentView);
+                legendContainer.addView(legendRow);
+            }
+        }
+    }
+
+    // Color gradient interpolator
+    private int interpolateColor(int colorStart, int colorEnd, float fraction) {
+        float[] startHsv = new float[3];
+        float[] endHsv = new float[3];
+        Color.colorToHSV(colorStart, startHsv);
+        Color.colorToHSV(colorEnd, endHsv);
+
+        float h = startHsv[0] + (endHsv[0] - startHsv[0]) * fraction;
+        float s = startHsv[1] + (endHsv[1] - startHsv[1]) * fraction;
+        float v = startHsv[2] + (endHsv[2] - startHsv[2]) * fraction;
+
+        return Color.HSVToColor(new float[]{h, s, v});
+    }
+
+    // Filter list based on search query
+    private void filterAppList(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            // Default view: only display apps with > 0 screentime
+            List<AppUsageInfo> activeApps = new ArrayList<>();
+            for (AppUsageInfo app : allInstalledApps) {
+                if (app.timeInForeground > 0) {
+                    activeApps.add(app);
+                }
+            }
+            renderAppList(activeApps);
+            return;
+        }
+
+        // When searching: search across ALL installed apps (including 0s apps)
+        String lowerQuery = query.toLowerCase().trim();
+        List<AppUsageInfo> filtered = new ArrayList<>();
+        for (AppUsageInfo app : allInstalledApps) {
+            if (app.appName != null && app.appName.toLowerCase().contains(lowerQuery)) {
+                filtered.add(app);
+            }
+        }
+        renderAppList(filtered);
+    }
+
+    // Render app rows in the scrollable container
+    private void renderAppList(List<AppUsageInfo> listToRender) {
         LinearLayout appUsageContainer = findViewById(R.id.app_usage_list);
         appUsageContainer.removeAllViews();
 
         int density = (int) getResources().getDisplayMetrics().density;
 
-        for (AppUsageInfo app : usageList) {
+        for (AppUsageInfo app : listToRender) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);

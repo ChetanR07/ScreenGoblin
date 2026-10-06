@@ -19,51 +19,48 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <TextView
-        android:id="@+id/today_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="20dp"
-        android:layout_marginTop="3dp"
-        android:text="@string/today_screen_time"
-        app:layout_constraintStart_toStartOf="@id/title"
-        app:layout_constraintTop_toBottomOf="@id/title" />
-
-    <TextView
-        android:id="@+id/screen_time_value"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/screen_time_value"
-        android:textSize="30sp"
-        android:textStyle="bold"
-        app:layout_constraintStart_toStartOf="@id/today_label"
-        app:layout_constraintTop_toBottomOf="@id/today_label" />
-
-    <!-- Scrollable Box Container -->
+    <!-- Scrollable Box Container covering 50% of the screen height -->
     <LinearLayout
         android:id="@+id/apps_box"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_marginStart="20dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="16dp"
         android:layout_marginEnd="20dp"
-        android:layout_marginBottom="24dp"
         android:background="@drawable/bg_scrollable_box"
         android:orientation="vertical"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintHeight_percent="0.50"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/screen_time_value">
+        app:layout_constraintTop_toBottomOf="@id/title">
 
-        <!-- Header at the top of the scrollable box with Search icon at top-left -->
+        <!-- Today's Screen Time inside the box -->
+        <TextView
+            android:id="@+id/today_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/today_screen_time"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <TextView
+            android:id="@+id/screen_time_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="10dp"
+            android:text="@string/screen_time_value"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <!-- Header with Search icon & textbox right below the screen time -->
         <LinearLayout
             android:id="@+id/box_header"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingBottom="10dp">
+            android:paddingBottom="8dp">
 
             <ImageView
                 android:id="@+id/search_icon"
@@ -72,14 +69,18 @@
                 android:contentDescription="@string/app_usage"
                 android:src="@drawable/ic_search" />
 
-            <TextView
-                android:id="@+id/app_usage_title"
-                android:layout_width="wrap_content"
+            <EditText
+                android:id="@+id/search_input"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:text="@string/app_usage"
-                android:textSize="18sp"
-                android:textStyle="bold" />
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:hint="Search apps..."
+                android:imeOptions="actionDone"
+                android:inputType="text"
+                android:maxLines="1"
+                android:textSize="15sp" />
 
         </LinearLayout>
 
@@ -107,6 +108,89 @@
 
     </LinearLayout>
 
+    <!-- Bottom Two Divisions naturally expanded into the remaining space -->
+    <LinearLayout
+        android:id="@+id/bottom_divisions"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="16dp"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/apps_box">
 
+        <!-- Left Division: Hollow Pie Chart & Legend -->
+        <LinearLayout
+            android:id="@+id/left_division"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_scrollable_box"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <TextView
+                android:id="@+id/pie_chart_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:text="Distribution"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <!-- Hollow Pie Chart placed towards top -->
+            <com.example.screengoblin.HollowPieChartView
+                android:id="@+id/pie_chart_view"
+                android:layout_width="match_parent"
+                android:layout_height="125dp"
+                android:layout_marginTop="4dp" />
+
+            <!-- Color & Percentage Legend below the chart -->
+            <ScrollView
+                android:id="@+id/legend_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:layout_marginTop="6dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/pie_chart_legend"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical" />
+
+            </ScrollView>
+
+        </LinearLayout>
+
+        <!-- Right Division: Blank -->
+        <LinearLayout
+            android:id="@+id/right_division"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/bg_scrollable_box"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <TextView
+                android:id="@+id/blank_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Blank"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+        </LinearLayout>
+
+    </LinearLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>
